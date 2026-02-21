@@ -1,0 +1,16 @@
+# TODO - UI Updates
+
+## Task: Add service provider details to BrowseServices and Customer Dashboard
+
+### Plan:
+- [ ] **BrowseServices.tsx** - Add a detailed list section at the bottom showing all service providers with name, service type, rating, reviews, location
+- [ ] **Dashboard.tsx** - Update subscription cards to include rating and reviews from the associated service
+
+### Progress:
+- [x] Plan created and confirmed by user
+- [ ] Implement BrowseServices.tsx changes
+- [ ] Implement Dashboard.tsx changes
+
+### Implementation Steps:
+1. BrowseServices.tsx - Add detailed list section after the services grid
+2. Dashboard.tsx - Add rating and reviews to subscription cards using serviceId
