@@ -191,7 +191,7 @@ export default function BrowseServices() {
                   <div className="border-t pt-4">
                     <p className="text-gray-600 text-sm mb-1">Starting from</p>
                     <p className="text-2xl text-gray-900">
-                      ${service.monthlyPrice}
+                      ₹{service.monthlyPrice}
                       <span className="text-sm text-gray-600">/month</span>
                     </p>
                   </div>
@@ -282,7 +282,7 @@ export default function BrowseServices() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm font-medium text-gray-900">${service.monthlyPrice}</span>
+                        <span className="text-sm font-medium text-gray-900">₹{service.monthlyPrice}</span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <button

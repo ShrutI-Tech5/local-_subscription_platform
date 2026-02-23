@@ -1,4 +1,4 @@
-  // Mock data and localStorage utilities
+// Mock data and localStorage utilities
 
 export interface User {
   id: string;
@@ -56,6 +56,7 @@ export interface InstantBooking {
   serviceType: string;
   description: string;
   image?: string;
+  voiceNote?: string;
   status: 'pending' | 'accepted' | 'completed' | 'rejected';
   createdAt: string;
   providerId?: string;
@@ -295,7 +296,7 @@ export const SERVICE_TYPES = [
 // Helper function to generate mock services
 const generateMockServices = (): Service[] => {
   const services: Service[] = [];
-const locations = ['Chennai', 'Coimbatore', 'Madurai', 'Trichy', 'Salem', 'Tiruppur', 'Erode', 'Vellore', 'Tuticorin', 'Tirunelveli', 'Dindigul', 'Thanjavur', 'Nagercoil', 'Kanchipuram', 'Karur', 'Cuddalore', 'Pollachi', 'Hosur', 'Neyveli', 'Chengalpattu'];
+  const locations = ['Chennai', 'Coimbatore', 'Madurai', 'Trichy', 'Salem', 'Tiruppur', 'Erode', 'Vellore', 'Tuticorin', 'Tirunelveli', 'Dindigul', 'Thanjavur', 'Nagercoil', 'Kanchipuram', 'Karur', 'Cuddalore', 'Pollachi', 'Hosur', 'Neyveli', 'Chengalpattu'];
   
   const firstNames = ['John', 'Mike', 'Sarah', 'Robert', 'Emily', 'David', 'Jennifer', 'Michael', 'Lisa', 'James', 'Amanda', 'Christopher', 'Jessica', 'Daniel', 'Ashley', 'Matthew', 'Stephanie', 'Andrew', 'Nicole', 'Joshua'];
   const lastNames = ['Smith', 'Johnson', 'Brown', 'Williams', 'Jones', 'Davis', 'Miller', 'Wilson', 'Moore', 'Taylor', 'Anderson', 'Thomas', 'Jackson', 'White', 'Harris', 'Martin', 'Thompson', 'Garcia', 'Martinez', 'Robinson'];

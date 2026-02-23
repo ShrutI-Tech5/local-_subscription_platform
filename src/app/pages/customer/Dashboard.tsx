@@ -1,16 +1,31 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
-import { getCustomerSubscriptions, getCustomerBookings, updateBooking } from '../../utils/mockData';
-import { Package, Zap, User, LogOut, Bell, ThumbsUp, ThumbsDown, CreditCard, Send, UserCircle } from 'lucide-react';
+import { getCustomerSubscriptions, getCustomerBookings, updateBooking, InstantBooking } from '../../utils/mockData';
+import { Package, Zap, User, LogOut, Bell, ThumbsUp, ThumbsDown, CreditCard, Send, UserCircle, Trash2, EyeOff } from 'lucide-react';
 
 export default function CustomerDashboard() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [subscriptions, setSubscriptions] = useState<any[]>([]);
-  const [bookings, setBookings] = useState<any[]>([]);
+  const [bookings, setBookings] = useState<InstantBooking[]>([]);
   const [feedbackStates, setFeedbackStates] = useState<Record<string, { showMessage: boolean; message: string }>>({});
   const [refreshKey, setRefreshKey] = useState(0);
+  const [hiddenBookings, setHiddenBookings] = useState<string[]>([]);
+
+  // Load hidden bookings from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('hiddenBookings');
+    if (saved) {
+      setHiddenBookings(JSON.parse(saved));
+    }
+  }, []);
+
+  // Save hidden bookings to localStorage
+  const saveHiddenBookings = (hidden: string[]) => {
+    setHiddenBookings(hidden);
+    localStorage.setItem('hiddenBookings', JSON.stringify(hidden));
+  };
 
   useEffect(() => {
     if (!user || user.role !== 'customer') {
@@ -25,6 +40,25 @@ export default function CustomerDashboard() {
   const handleLogout = () => {
     logout();
     navigate('/');
+  };
+
+  const handleHideBooking = (bookingId: string) => {
+    const newHidden = [...hiddenBookings, bookingId];
+    saveHiddenBookings(newHidden);
+  };
+
+  const handleShowAllBookings = () => {
+    saveHiddenBookings([]);
+  };
+
+  const handleDeleteBooking = (bookingId: string) => {
+    if (window.confirm('Are you sure you want to delete this booking? This action cannot be undone.')) {
+      // Get all bookings and remove the deleted one
+      const allBookings = getCustomerBookings(user!.id);
+      const updatedBookings = allBookings.filter((b: InstantBooking) => b.id !== bookingId);
+      localStorage.setItem('instantBookings', JSON.stringify(updatedBookings));
+      setRefreshKey(prev => prev + 1);
+    }
   };
 
   const handleFeedback = (bookingId: string, feedback: 'thumbs_up' | 'thumbs_down') => {
@@ -73,6 +107,9 @@ export default function CustomerDashboard() {
       }
     });
   };
+
+  // Filter visible bookings (exclude hidden ones)
+  const visibleBookings = bookings.filter(b => !hiddenBookings.includes(b.id));
 
   return (
     <div className="min-h-screen bg-pink-50">
@@ -210,10 +247,22 @@ export default function CustomerDashboard() {
 
         {/* Recent Instant Bookings */}
         <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-xl mb-4 text-gray-900">Recent Instant Bookings</h3>
-          {bookings.length > 0 ? (
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-xl text-gray-900">Recent Instant Bookings</h3>
+            {hiddenBookings.length > 0 && (
+              <button
+                onClick={handleShowAllBookings}
+                className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+              >
+                <EyeOff className="w-4 h-4" />
+                Show Hidden ({hiddenBookings.length})
+              </button>
+            )}
+          </div>
+          
+          {visibleBookings.length > 0 ? (
             <div className="space-y-4">
-              {bookings.slice(0, 5).map(booking => (
+              {visibleBookings.slice(0, 5).map(booking => (
                 <div key={booking.id} className="border border-gray-200 rounded-lg p-4">
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
@@ -240,6 +289,26 @@ export default function CustomerDashboard() {
                       }`}>
                         {booking.status}
                       </span>
+                      
+                      {/* Hide/Delete options for completed bookings */}
+                      {booking.status === 'completed' && (
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => handleHideBooking(booking.id)}
+                            className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
+                            title="Hide from dashboard"
+                          >
+                            <EyeOff className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteBooking(booking.id)}
+                            className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-100 rounded"
+                            title="Delete permanently"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
                       
                       {/* Payment option for accepted bookings */}
                       {booking.status === 'accepted' && (

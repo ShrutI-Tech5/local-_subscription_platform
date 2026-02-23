@@ -4,6 +4,8 @@ import { useAuth } from '../../context/AuthContext';
 import { addSubscription, addPayment, updateBooking } from '../../utils/mockData';
 import { CreditCard, Smartphone, Building2, CheckCircle, ArrowLeft } from 'lucide-react';
 
+const API_BASE_URL = 'http://localhost:5000/api';
+
 export default function Payment() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -38,10 +40,42 @@ export default function Payment() {
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     if (isInstantBooking && bookingId) {
-      // Handle instant booking payment
+      // Handle instant booking payment - update in MongoDB via API
+      try {
+        await fetch(`${API_BASE_URL}/instant-booking/${bookingId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'completed' })
+        });
+      } catch (error) {
+        console.error('Error updating booking in MongoDB:', error);
+      }
+
+      // Also update localStorage for backwards compatibility
       updateBooking(bookingId, { status: 'completed' });
 
-      // Record payment with providerId for earnings tracking
+      // Record payment to MongoDB
+      try {
+        const paymentData = {
+          userId: user!.id,
+          customerId: user!.id,
+          providerId: service.providerId,
+          amount: price,
+          type: 'instant',
+          status: 'success',
+          bookingId: bookingId
+        };
+        
+        await fetch(`${API_BASE_URL}/payment`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(paymentData)
+        });
+      } catch (error) {
+        console.error('Error saving payment to MongoDB:', error);
+      }
+
+      // Record payment in localStorage for backwards compatibility
       const payment = {
         id: Date.now().toString(),
         userId: user!.id,
@@ -55,15 +89,44 @@ export default function Payment() {
 
       addPayment(payment);
     } else {
-      // Handle subscription payment
-      // Calculate dates
+      // Handle subscription payment - save to MongoDB via API
+      let subscriptionMongoId = '';
+      try {
+        const subscriptionData = {
+          customerId: user!.id,
+          serviceId: service.id,
+          providerId: service.providerId,
+          plan: plan,
+          price: price,
+          serviceName: service.serviceType,
+          providerName: service.providerName,
+          serviceType: service.serviceType,
+          location: service.location
+        };
+
+        const response = await fetch(`${API_BASE_URL}/subscription`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(subscriptionData)
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          console.log('Subscription saved to MongoDB:', result.subscription);
+          subscriptionMongoId = result.subscription.id;
+        }
+      } catch (error) {
+        console.error('Error saving subscription to MongoDB:', error);
+      }
+
+      // Calculate dates for localStorage (backwards compatibility)
       const startDate = new Date();
       const endDate = new Date();
       if (plan === 'daily') endDate.setDate(endDate.getDate() + 1);
       else if (plan === 'weekly') endDate.setDate(endDate.getDate() + 7);
       else if (plan === 'monthly') endDate.setMonth(endDate.getMonth() + 1);
 
-      // Create subscription
+      // Create subscription in localStorage for backwards compatibility
       const newSubscription = {
         id: Date.now().toString(),
         customerId: user!.id,
@@ -80,7 +143,29 @@ export default function Payment() {
 
       addSubscription(newSubscription);
 
-      // Record payment with providerId for earnings tracking
+      // Record payment to MongoDB for subscription
+      try {
+        const paymentData = {
+          userId: user!.id,
+          customerId: user!.id,
+          providerId: service.providerId,
+          amount: price,
+          type: 'subscription',
+          status: 'success',
+          subscriptionId: subscriptionMongoId || newSubscription.id,
+          plan: plan
+        };
+        
+        await fetch(`${API_BASE_URL}/payment`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(paymentData)
+        });
+      } catch (error) {
+        console.error('Error saving payment to MongoDB:', error);
+      }
+
+      // Record payment in localStorage for backwards compatibility
       const payment = {
         id: Date.now().toString(),
         userId: user!.id,

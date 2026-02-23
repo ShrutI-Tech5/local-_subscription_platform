@@ -1,16 +1,31 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
-import { getProviderSubscriptions, getProviderBookings, getProviderPayments, getProviderServices } from '../../utils/mockData';
-import { DollarSign, Users, CheckCircle, Clock, LogOut, Bell, Star } from 'lucide-react';
+import { getProviderSubscriptions, getProviderBookings, getProviderPayments, getProviderServices, InstantBooking } from '../../utils/mockData';
+import { DollarSign, Users, CheckCircle, Clock, LogOut, Bell, Star, Trash2, EyeOff } from 'lucide-react';
 
 export default function ProviderDashboard() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [subscriptions, setSubscriptions] = useState<any[]>([]);
-  const [bookings, setBookings] = useState<any[]>([]);
+  const [bookings, setBookings] = useState<InstantBooking[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
+  const [hiddenBookings, setHiddenBookings] = useState<string[]>([]);
+
+  // Load hidden bookings from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('providerHiddenBookings');
+    if (saved) {
+      setHiddenBookings(JSON.parse(saved));
+    }
+  }, []);
+
+  // Save hidden bookings to localStorage
+  const saveHiddenBookings = (hidden: string[]) => {
+    setHiddenBookings(hidden);
+    localStorage.setItem('providerHiddenBookings', JSON.stringify(hidden));
+  };
 
   useEffect(() => {
     if (!user || user.role !== 'provider') {
@@ -29,15 +44,37 @@ export default function ProviderDashboard() {
     navigate('/');
   };
 
+  const handleHideBooking = (bookingId: string) => {
+    const newHidden = [...hiddenBookings, bookingId];
+    saveHiddenBookings(newHidden);
+  };
+
+  const handleShowAllBookings = () => {
+    saveHiddenBookings([]);
+  };
+
+  const handleDeleteBooking = (bookingId: string) => {
+    if (window.confirm('Are you sure you want to delete this booking? This action cannot be undone.')) {
+      // Get all bookings and remove the deleted one
+      const allBookings = getProviderBookings(user!.id);
+      const updatedBookings = allBookings.filter((b: InstantBooking) => b.id !== bookingId);
+      localStorage.setItem('instantBookings', JSON.stringify(updatedBookings));
+      window.location.reload();
+    }
+  };
+
   const totalEarnings = payments
     .filter(p => p.status === 'success')
     .reduce((sum, p) => sum + p.amount, 0);
 
-  const pendingRequests = bookings.filter(b => b.status === 'pending').length;
+  // Filter visible bookings (exclude hidden ones)
+  const visibleBookings = bookings.filter(b => !hiddenBookings.includes(b.id));
+  
+  const pendingRequests = visibleBookings.filter(b => b.status === 'pending').length;
   const activeCustomers = subscriptions.filter(s => s.status === 'active').length;
   
   // Count completed jobs (from bookings with 'completed' status)
-  const completedJobs = bookings.filter(b => b.status === 'completed').length;
+  const completedJobs = visibleBookings.filter(b => b.status === 'completed').length;
 
   // Get reviews from provider's services
   const allReviews: Array<{ customerName: string; rating: number; comment: string; date: string; serviceType: string }> = [];
@@ -122,7 +159,7 @@ export default function ProviderDashboard() {
               </div>
               <div>
                 <p className="text-gray-600 text-sm">Total Earnings</p>
-                <p className="text-2xl text-gray-900">${totalEarnings.toFixed(2)}</p>
+                <p className="text-2xl text-gray-900">₹{totalEarnings.toFixed(2)}</p>
               </div>
             </div>
           </div>
@@ -213,7 +250,7 @@ export default function ProviderDashboard() {
                   .map(sub => (
                     <div key={sub.id} className="border border-gray-200 rounded-lg p-3">
                       <p className="text-gray-900">{sub.serviceName}</p>
-                      <p className="text-sm text-gray-600">Plan: {sub.plan} - ${sub.price}</p>
+                      <p className="text-sm text-gray-600">Plan: {sub.plan} - ₹{sub.price}</p>
                       <p className="text-xs text-gray-500">
                         Until: {new Date(sub.endDate).toLocaleDateString()}
                       </p>
@@ -266,9 +303,10 @@ export default function ProviderDashboard() {
               View All
             </button>
           </div>
-          {bookings.filter(b => b.status === 'pending').length > 0 ? (
+          
+          {visibleBookings.filter(b => b.status === 'pending').length > 0 ? (
             <div className="space-y-3">
-              {bookings
+              {visibleBookings
                 .filter(b => b.status === 'pending')
                 .slice(0, 3)
                 .map(booking => (
@@ -283,11 +321,78 @@ export default function ProviderDashboard() {
                       </span>
                     </div>
                     <p className="text-xs text-gray-600 line-clamp-2">{booking.description}</p>
+                    <button
+                      onClick={() => navigate('/provider/service-requests')}
+                      className="mt-2 w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                    >
+                      Give Offer
+                    </button>
                   </div>
                 ))}
             </div>
           ) : (
             <p className="text-gray-500 text-center py-8">No pending requests</p>
+          )}
+        </div>
+
+        {/* Completed Jobs with Hide/Delete options */}
+        <div className="bg-white rounded-xl shadow-sm p-6 mt-8">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-xl text-gray-900">Completed Jobs</h3>
+            {hiddenBookings.length > 0 && (
+              <button
+                onClick={handleShowAllBookings}
+                className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+              >
+                <EyeOff className="w-4 h-4" />
+                Show Hidden ({hiddenBookings.length})
+              </button>
+            )}
+          </div>
+          
+          {visibleBookings.filter(b => b.status === 'completed').length > 0 ? (
+            <div className="space-y-3">
+              {visibleBookings
+                .filter(b => b.status === 'completed')
+                .slice(0, 5)
+                .map(booking => (
+                  <div key={booking.id} className="border border-gray-200 rounded-lg p-3 flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="text-gray-900 font-medium">{booking.serviceType}</p>
+                        <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">
+                          Completed
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600">Customer: {booking.customerName}</p>
+                      {booking.price && (
+                        <p className="text-sm text-gray-600">Quote: ₹{booking.price}</p>
+                      )}
+                      <p className="text-xs text-gray-500 mt-1">
+                        {new Date(booking.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="flex gap-1 ml-2">
+                      <button
+                        onClick={() => handleHideBooking(booking.id)}
+                        className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
+                        title="Hide from dashboard"
+                      >
+                        <EyeOff className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteBooking(booking.id)}
+                        className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-100 rounded"
+                        title="Delete permanently"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-center py-8">No completed jobs</p>
           )}
         </div>
       </div>

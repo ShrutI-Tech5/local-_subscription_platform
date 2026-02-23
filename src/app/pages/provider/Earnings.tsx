@@ -4,6 +4,8 @@ import { useAuth } from '../../context/AuthContext';
 import { getProviderPayments, getProviderSubscriptions } from '../../utils/mockData';
 import { ArrowLeft, DollarSign, TrendingUp, Calendar } from 'lucide-react';
 
+const API_BASE_URL = 'http://localhost:5000/api';
+
 export default function Earnings() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -16,9 +18,35 @@ export default function Earnings() {
       return;
     }
 
-    setPayments(getProviderPayments(user.id));
-    setSubscriptions(getProviderSubscriptions(user.id));
+    loadData();
   }, [user, navigate]);
+
+  const loadData = async () => {
+    // Try to load from MongoDB first
+    try {
+      const paymentsResponse = await fetch(`${API_BASE_URL}/provider/${user?.id}/payments`);
+      const paymentsResult = await paymentsResponse.json();
+      if (paymentsResult.success) {
+        setPayments(paymentsResult.payments);
+      }
+      
+      const subscriptionsResponse = await fetch(`${API_BASE_URL}/provider/${user?.id}/subscriptions`);
+      const subscriptionsResult = await subscriptionsResponse.json();
+      if (subscriptionsResult.success) {
+        setSubscriptions(subscriptionsResult.subscriptions);
+      }
+    } catch (error) {
+      console.error('Error loading data from MongoDB:', error);
+    }
+
+    // Fallback to localStorage
+    if (user) {
+      const localPayments = getProviderPayments(user.id);
+      const localSubscriptions = getProviderSubscriptions(user.id);
+      if (payments.length === 0) setPayments(localPayments);
+      if (subscriptions.length === 0) setSubscriptions(localSubscriptions);
+    }
+  };
 
   const totalEarnings = payments
     .filter(p => p.status === 'success')
@@ -33,7 +61,7 @@ export default function Earnings() {
   const currentYear = new Date().getFullYear();
   const monthlyEarnings = payments
     .filter(p => {
-      const paymentDate = new Date(p.date);
+      const paymentDate = new Date(p.date || p.created_at);
       return (
         p.status === 'success' &&
         paymentDate.getMonth() === currentMonth &&
@@ -47,7 +75,7 @@ export default function Earnings() {
   payments
     .filter(p => p.status === 'success')
     .forEach(p => {
-      const date = new Date(p.date);
+      const date = new Date(p.date || p.created_at);
       const monthYear = `${date.toLocaleString('default', { month: 'short' })} ${date.getFullYear()}`;
       earningsByMonth[monthYear] = (earningsByMonth[monthYear] || 0) + p.amount;
     });
@@ -79,7 +107,7 @@ export default function Earnings() {
               </div>
               <p className="text-green-100">Total Earnings</p>
             </div>
-            <p className="text-3xl mb-1">${totalEarnings.toFixed(2)}</p>
+            <p className="text-3xl mb-1">₹{totalEarnings.toFixed(2)}</p>
             <p className="text-sm text-green-100">Before commission</p>
           </div>
 
@@ -90,7 +118,7 @@ export default function Earnings() {
               </div>
               <p className="text-blue-100">Net Earnings</p>
             </div>
-            <p className="text-3xl mb-1">${netEarnings.toFixed(2)}</p>
+            <p className="text-3xl mb-1">₹{netEarnings.toFixed(2)}</p>
             <p className="text-sm text-blue-100">After 15% commission</p>
           </div>
 
@@ -101,7 +129,7 @@ export default function Earnings() {
               </div>
               <p className="text-purple-100">This Month</p>
             </div>
-            <p className="text-3xl mb-1">${monthlyEarnings.toFixed(2)}</p>
+            <p className="text-3xl mb-1">₹{monthlyEarnings.toFixed(2)}</p>
             <p className="text-sm text-purple-100">
               {new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}
             </p>
@@ -114,15 +142,15 @@ export default function Earnings() {
           <div className="space-y-4">
             <div className="flex justify-between items-center pb-3 border-b">
               <span className="text-gray-600">Gross Revenue</span>
-              <span className="text-xl text-gray-900">${totalEarnings.toFixed(2)}</span>
+              <span className="text-xl text-gray-900">₹{totalEarnings.toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center pb-3 border-b">
               <span className="text-gray-600">Platform Commission (15%)</span>
-              <span className="text-xl text-red-600">-${platformCommission.toFixed(2)}</span>
+              <span className="text-xl text-red-600">-₹{platformCommission.toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-900">Net Revenue</span>
-              <span className="text-2xl text-green-600">${netEarnings.toFixed(2)}</span>
+              <span className="text-2xl text-green-600">₹{netEarnings.toFixed(2)}</span>
             </div>
           </div>
         </div>
@@ -141,11 +169,11 @@ export default function Earnings() {
                     <div key={month} className="border border-gray-200 rounded-lg p-4">
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-gray-900">{month}</span>
-                        <span className="text-xl text-gray-900">${amount.toFixed(2)}</span>
+                        <span className="text-xl text-gray-900">₹{amount.toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between text-sm text-gray-600">
                         <span>After commission:</span>
-                        <span className="text-green-600">${net.toFixed(2)}</span>
+                        <span className="text-green-600">₹{net.toFixed(2)}</span>
                       </div>
                       <div className="mt-2 bg-gray-200 rounded-full h-2">
                         <div
@@ -180,26 +208,26 @@ export default function Earnings() {
                 </thead>
                 <tbody>
                   {payments
-                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                    .sort((a, b) => new Date(b.date || b.created_at).getTime() - new Date(a.date || a.created_at).getTime())
                     .map(payment => {
                       const commission = payment.amount * 0.15;
                       const netAmount = payment.amount - commission;
                       return (
                         <tr key={payment.id} className="border-b hover:bg-gray-50">
                           <td className="py-3 px-4 text-gray-700 text-sm">
-                            {new Date(payment.date).toLocaleDateString()}
+                            {new Date(payment.date || payment.created_at).toLocaleDateString()}
                           </td>
                           <td className="py-3 px-4 text-gray-700 capitalize">
                             {payment.type}
                           </td>
                           <td className="py-3 px-4 text-gray-900">
-                            ${payment.amount.toFixed(2)}
+                            ₹{payment.amount.toFixed(2)}
                           </td>
                           <td className="py-3 px-4 text-red-600">
-                            -${commission.toFixed(2)}
+                            -₹{commission.toFixed(2)}
                           </td>
                           <td className="py-3 px-4 text-green-600">
-                            ${netAmount.toFixed(2)}
+                            ₹{netAmount.toFixed(2)}
                           </td>
                           <td className="py-3 px-4">
                             <span className={`px-3 py-1 rounded-full text-xs ${

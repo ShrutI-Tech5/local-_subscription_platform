@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
 import { addInstantBooking, getServices, Service, SERVICE_TYPES } from '../../utils/mockData';
-import { ArrowLeft, Upload, MapPin, Star, Phone, Edit2, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Upload, MapPin, Star, Phone, Edit2, CheckCircle, Mic, Square, Trash2 } from 'lucide-react';
+
+const API_BASE_URL = 'http://localhost:5000/api';
 
 export default function InstantBooking() {
   const navigate = useNavigate();
@@ -21,6 +23,13 @@ export default function InstantBooking() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [nearbyProviders, setNearbyProviders] = useState<Service[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
+  
+  // Voice recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string>('');
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   // Initialize address and phone from user data
   useEffect(() => {
@@ -32,6 +41,65 @@ export default function InstantBooking() {
       }));
     }
   }, [user]);
+
+  // Voice recording functions
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        setAudioBlob(blob);
+        const url = URL.createObjectURL(blob);
+        setAudioUrl(url);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      recorder.start(1000); // Collect data every second
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Error accessing microphone:', error);
+      alert('Could not access microphone. Please ensure microphone permissions are granted.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const deleteRecording = () => {
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+    }
+    setAudioBlob(null);
+    setAudioUrl('');
+    audioChunksRef.current = [];
+  };
+
+  // Convert blob to base64
+  const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        resolve(base64.split(',')[1]); // Remove data URL prefix
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
 
   // Filter nearby providers after submission
   useEffect(() => {
@@ -62,8 +130,7 @@ export default function InstantBooking() {
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     if (!formData.serviceType) newErrors.serviceType = 'Please select a service type';
-    if (!formData.description.trim()) newErrors.description = 'Please describe your problem';
-    if (formData.description.trim().length < 10) newErrors.description = 'Description must be at least 10 characters';
+    if (!formData.description.trim() && !audioBlob) newErrors.description = 'Please describe your problem or record a voice note';
     if (!formData.address.trim()) newErrors.address = 'Please provide your address';
     if (!formData.phone.trim()) newErrors.phone = 'Please provide your phone number';
     if (formData.phone.trim().length < 10) newErrors.phone = 'Please provide a valid phone number';
@@ -71,12 +138,56 @@ export default function InstantBooking() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
 
-    // Create instant booking first
+    // Create instant booking ID
     const newBookingId = Date.now().toString();
+    
+    // Convert voice note to base64 if exists
+    let voiceNoteBase64 = '';
+    if (audioBlob) {
+      try {
+        voiceNoteBase64 = await blobToBase64(audioBlob);
+      } catch (error) {
+        console.error('Error converting voice note:', error);
+      }
+    }
+    
+    // Try to save to MongoDB via API
+    try {
+      const bookingData = {
+        customerId: user!.id,
+        customerName: user!.name,
+        serviceType: formData.serviceType,
+        description: formData.description,
+        image: imagePreview || undefined,
+        voiceNote: voiceNoteBase64 || undefined,
+        address: formData.address,
+        phone: formData.phone
+      };
+
+      const response = await fetch(`${API_BASE_URL}/instant-booking`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bookingData)
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        console.log('Booking saved to MongoDB:', result.booking);
+        // Use MongoDB booking ID if available
+        setBookingId(result.booking.id || newBookingId);
+      } else {
+        setBookingId(newBookingId);
+      }
+    } catch (error) {
+      console.error('Error saving booking to MongoDB:', error);
+      setBookingId(newBookingId);
+    }
+
+    // Also save to localStorage for backwards compatibility
     const newBooking = {
       id: newBookingId,
       customerId: user!.id,
@@ -84,24 +195,42 @@ export default function InstantBooking() {
       serviceType: formData.serviceType,
       description: formData.description,
       image: imagePreview || undefined,
+      voiceNote: voiceNoteBase64 || undefined,
       status: 'pending' as const,
       createdAt: new Date().toISOString()
     };
 
     addInstantBooking(newBooking);
-    setBookingId(newBookingId);
     setSubmitted(true);
   };
 
-  const handleSelectProvider = () => {
+  const handleSelectProvider = async () => {
     if (selectedProvider && bookingId) {
       const provider = nearbyProviders.find(p => p.id === selectedProvider);
+      
+      // Update booking with provider info in MongoDB
+      try {
+        await fetch(`${API_BASE_URL}/instant-booking/${bookingId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            providerId: selectedProvider,
+            providerName: provider?.providerName,
+            price: provider?.monthlyPrice
+          })
+        });
+      } catch (error) {
+        console.error('Error updating booking in MongoDB:', error);
+      }
+
+      // Update localStorage for backwards compatibility
       const bookings = JSON.parse(localStorage.getItem('instantBookings') || '[]');
       const index = bookings.findIndex((b: any) => b.id === bookingId);
       if (index !== -1) {
         bookings[index] = {
           ...bookings[index],
           providerId: selectedProvider,
+          providerName: provider?.providerName,
           price: provider?.monthlyPrice
         };
         localStorage.setItem('instantBookings', JSON.stringify(bookings));
@@ -332,16 +461,52 @@ export default function InstantBooking() {
               {errors.serviceType && <p className="text-red-500 text-sm mt-1">{errors.serviceType}</p>}
             </div>
 
-            {/* Description */}
+            {/* Description with Voice Note */}
             <div>
               <label className="block mb-2 text-gray-700">Problem Description *</label>
-              <textarea
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="Describe the problem in detail..."
-                rows={5}
-              />
+              <div className="relative">
+                <textarea
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  className="w-full px-4 py-3 pr-24 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="Describe the problem in detail or record a voice note..."
+                  rows={5}
+                />
+                <div className="absolute right-3 bottom-3 flex items-center gap-2">
+                  {audioUrl ? (
+                    <>
+                      <audio controls src={audioUrl} className="h-8 w-40" />
+                      <button
+                        type="button"
+                        onClick={deleteRecording}
+                        className="p-2 bg-red-100 text-red-600 rounded-full hover:bg-red-200"
+                        title="Delete voice note"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={isRecording ? stopRecording : startRecording}
+                      className={`p-2 rounded-full transition-colors ${
+                        isRecording 
+                          ? 'bg-red-500 text-white animate-pulse' 
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
+                      title={isRecording ? 'Stop recording' : 'Record voice note'}
+                    >
+                      {isRecording ? <Square className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                    </button>
+                  )}
+                </div>
+              </div>
+              {isRecording && (
+                <p className="text-red-500 text-sm mt-1 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                  Recording... Click the microphone button to stop.
+                </p>
+              )}
               {errors.description && <p className="text-red-500 text-sm mt-1">{errors.description}</p>}
             </div>
 

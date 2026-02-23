@@ -193,7 +193,7 @@ export default function SubscriptionSelection() {
 
                 <h4 className="text-xl mb-2 text-gray-900">{plan.name}</h4>
                 <div className="mb-4">
-                  <span className="text-3xl text-gray-900">${plan.price}</span>
+                  <span className="text-3xl text-gray-900">₹{plan.price}</span>
                   <span className="text-gray-600 text-sm">/{plan.period}</span>
                 </div>
 
@@ -253,7 +253,7 @@ export default function SubscriptionSelection() {
             </div>
             <div className="border-t pt-3 flex justify-between items-center">
               <span className="text-xl text-gray-900">Total:</span>
-              <span className="text-2xl text-gray-900">${selectedPlanDetails?.price}</span>
+              <span className="text-2xl text-gray-900">₹{selectedPlanDetails?.price}</span>
             </div>
           </div>
 
