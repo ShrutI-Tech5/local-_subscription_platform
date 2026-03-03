@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
-import { getServices, Service } from '../../utils/mockData';
-import { Search, Star, MapPin, ArrowLeft, Filter } from 'lucide-react';
+import { getServices, Service, getUsers, User } from '../../utils/mockData';
+import { Search, Star, MapPin, ArrowLeft, Filter, CheckCircle } from 'lucide-react';
 
 export default function BrowseServices() {
   const navigate = useNavigate();
@@ -13,6 +13,7 @@ export default function BrowseServices() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [locationFilter, setLocationFilter] = useState('');
   const [sortBy, setSortBy] = useState('rating');
+  const [providersMap, setProvidersMap] = useState<{ [key: string]: User }>({});
 
   useEffect(() => {
     if (!user) {
@@ -20,9 +21,18 @@ export default function BrowseServices() {
       return;
     }
 
+    const allUsers = getUsers();
+    const providers = allUsers.filter(u => u.role === 'provider' && u.status === 'active');
+    const providersById: { [key: string]: User } = {};
+    providers.forEach(p => {
+      providersById[p.id] = p;
+    });
+    setProvidersMap(providersById);
+
     const allServices = getServices();
-    setServices(allServices);
-    setFilteredServices(allServices);
+    const activeProviderServices = allServices.filter(s => providersById[s.providerId]);
+    setServices(activeProviderServices);
+    setFilteredServices(activeProviderServices);
   }, [user, navigate]);
 
   useEffect(() => {
@@ -180,7 +190,11 @@ export default function BrowseServices() {
                     </div>
                   </div>
 
-                  <h3 className="text-xl mb-2 text-gray-900">{service.providerName}</h3>
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="text-xl text-gray-900">{service.providerName}</h3>
+                    <CheckCircle className="w-5 h-5 text-green-500" title="Verified Provider" />
+                  </div>
+                  <p className="text-green-700 text-xs font-semibold mb-2">✓ Properly Registered</p>
                   <p className="text-gray-600 text-sm mb-4 line-clamp-2">{service.description}</p>
 
                   <div className="flex items-center text-gray-600 text-sm mb-4">
@@ -257,7 +271,11 @@ export default function BrowseServices() {
                             {service.providerName.charAt(0)}
                           </div>
                           <div className="ml-4">
-                            <p className="text-sm font-medium text-gray-900">{service.providerName}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-gray-900">{service.providerName}</p>
+                              <CheckCircle className="w-4 h-4 text-green-500" title="Verified Provider" />
+                            </div>
+                            <p className="text-xs text-green-600">Registered Provider</p>
                           </div>
                         </div>
                       </td>
